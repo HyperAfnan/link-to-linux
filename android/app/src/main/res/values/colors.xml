@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_start">#0D0F1A</color>
+    <color name="bg_end">#1A1F3A</color>
+
+    <color name="card_bg">#1E2240</color>
+    <color name="divider">#2A3060</color>
+
+    <color name="text_primary">#EAEEF8</color>
+    <color name="text_secondary">#7A85B0</color>
+
+    <color name="accent_blue">#4F8EF7</color>
+
+    <color name="btn_primary">#4F8EF7</color>
+    <color name="btn_secondary">#2E7D4F</color>
+    <color name="btn_danger">#7C2D2D</color>
+</resources>
