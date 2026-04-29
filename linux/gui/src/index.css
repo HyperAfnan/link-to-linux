@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Gruvbox Dark palette */
+  --color-gb-bg-hard:    #1d2021;
+  --color-gb-bg:         #282828;
+  --color-gb-bg1:        #3c3836;
+  --color-gb-bg2:        #504945;
+  --color-gb-bg3:        #665c54;
+  --color-gb-bg4:        #7c6f64;
+  --color-gb-fg:         #ebdbb2;
+  --color-gb-fg2:        #d5c4a1;
+  --color-gb-fg3:        #bdae93;
+  --color-gb-fg4:        #a89984;
+  --color-gb-yellow:     #d79921;
+  --color-gb-yellow-br:  #fabd2f;
+  --color-gb-red:        #cc241d;
+  --color-gb-red-br:     #fb4934;
+  --color-gb-green:      #98971a;
+  --color-gb-green-br:   #b8bb26;
+  --color-gb-aqua:       #689d6a;
+  --color-gb-aqua-br:    #8ec07c;
+  --color-gb-orange:     #d65d0e;
+  --color-gb-orange-br:  #fe8019;
+
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #282828;
+  color: #ebdbb2;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar to match theme */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #3c3836;
+}
+::-webkit-scrollbar-thumb {
+  background: #665c54;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7c6f64;
+}
+
+/* Scan button pulse animation */
+@keyframes scan-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(215, 153, 33, 0.5); }
+  50%       { box-shadow: 0 0 0 8px rgba(215, 153, 33, 0); }
+}
+
+.scan-pulse {
+  animation: scan-pulse 1.2s ease-in-out infinite;
+}
+
+/* Device card hover ring */
+@keyframes connecting-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(215, 153, 33, 0.6); }
+  100% { box-shadow: 0 0 0 6px rgba(215, 153, 33, 0); }
+}
+
+.connecting-ring {
+  animation: connecting-ring 0.9s ease-out infinite;
+}

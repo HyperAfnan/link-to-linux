@@ -1,0 +1,31 @@
+# Node.js
+node_modules
+dist
+dist-ssr
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Rust / Tauri
+src-tauri/target
+src-tauri/Cargo.lock
+src-tauri/gen
+
+# IDEs and Editors
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log

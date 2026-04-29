@@ -59,3 +59,6 @@ obj/
 
 # Mac OS X
 .DS_Store
+
+target/
+node_packages/
