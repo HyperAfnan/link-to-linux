@@ -1,4 +1,4 @@
-package com.linktolinux.wifidirect
+package com.linktolinux.wifidirect.p2p
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -8,6 +8,7 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pManager
 import android.net.wifi.p2p.WifiP2pManager.Channel
 import android.util.Log
+import com.linktolinux.wifidirect.presentation.MainActivity
 
 private const val TAG = "P2pReceiver"
 
