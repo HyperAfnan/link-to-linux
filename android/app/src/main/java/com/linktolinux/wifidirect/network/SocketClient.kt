@@ -16,9 +16,9 @@ import java.net.InetSocketAddress
 import java.net.Socket
 
 class SocketClient {
-    private val TAG = "SocketClient"
-    private val SERVER_IP = "192.168.49.1"
-    private val SERVER_PORT = 5005
+    private val tag = "SocketClient"
+    private val serverIp = "192.168.49.1"
+    private val serverPort = 5005
 
     private var socket: Socket? = null
     private var writer: BufferedWriter? = null
@@ -32,14 +32,14 @@ class SocketClient {
 
     suspend fun connect() = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Connecting to $SERVER_IP:$SERVER_PORT...")
+            Log.d(tag, "Connecting to $serverIp:$serverPort...")
             socket = Socket()
-            socket?.connect(InetSocketAddress(SERVER_IP, SERVER_PORT), 10000)
+            socket?.connect(InetSocketAddress(serverIp, serverPort), 10000)
             
             writer = BufferedWriter(OutputStreamWriter(socket?.getOutputStream(), "UTF-8"))
             reader = BufferedReader(InputStreamReader(socket?.getInputStream(), "UTF-8"))
             
-            Log.d(TAG, "Connected to Linux Server!")
+            Log.d(tag, "Connected to Linux Server!")
             startListening()
             
             // Initial Handshake
@@ -50,7 +50,7 @@ class SocketClient {
                 timestamp = System.currentTimeMillis() / 1000
             ))
         } catch (e: Exception) {
-            Log.e(TAG, "Connection failed: ${e.message}", e)
+            Log.e(tag, "Connection failed: ${e.message}", e)
         }
     }
 
@@ -63,15 +63,15 @@ class SocketClient {
                     if (line.isNotBlank()) {
                         try {
                             val msg = Json.decodeFromString<SocketMessage>(line)
-                            Log.d(TAG, "Received: $msg")
+                            Log.d(tag, "Received: $msg")
                             _incomingMessages.emit(msg)
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to parse message: $line", e)
+                            Log.e(tag, "Failed to parse message: $line", e)
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Read loop error: ${e.message}")
+                Log.e(tag, "Read loop error: ${e.message}")
             } finally {
                 disconnect()
             }
@@ -84,9 +84,9 @@ class SocketClient {
             writer?.write(json)
             writer?.write("\n")
             writer?.flush()
-            Log.d(TAG, "Sent: $json")
+            Log.d(tag, "Sent: $json")
         } catch (e: Exception) {
-            Log.e(TAG, "Send failed: ${e.message}", e)
+            Log.e(tag, "Send failed: ${e.message}", e)
         }
     }
 
@@ -97,11 +97,11 @@ class SocketClient {
             reader?.close()
             socket?.close()
         } catch (e: Exception) {
-            // Ignore
+            Log.e(tag, "Error during disconnect: ${e.message}", e)
         }
         writer = null
         reader = null
         socket = null
-        Log.d(TAG, "Disconnected from server")
+        Log.d(tag, "Disconnected from server")
     }
 }

@@ -9,6 +9,7 @@
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="tiramisu"
         xmlns:tools="http://schemas.android.com/tools" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature
         android:name="android.hardware.wifi.direct"

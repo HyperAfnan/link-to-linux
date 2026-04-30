@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.linktolinux.wifidirect.network.SocketClient
 import com.linktolinux.wifidirect.network.models.SocketMessage
 import com.linktolinux.wifidirect.p2p.WiFiDirectManager
+import com.linktolinux.wifidirect.notifications.NotificationHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,7 @@ class MainViewModel(
     
     private val TAG = "MainViewModel"
     private val socketClient = SocketClient()
+    private val notificationHelper = NotificationHelper(application)
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -34,7 +36,10 @@ class MainViewModel(
         _uiState.value = UiState.Scanning
         p2pManager.discoverPeers(
             onSuccess = { Log.d(TAG, "Discovery success") },
-            onFailure = { _uiState.value = UiState.Error("Discovery failed: $it") }
+            onFailure = { 
+                _uiState.value = UiState.Error("Discovery failed: $it")
+                notificationHelper.showConnectionFailedNotification("Discovery failed: $it")
+            }
         )
     }
 
@@ -50,17 +55,26 @@ class MainViewModel(
         p2pManager.connect(
             device,
             onSuccess = { Log.d(TAG, "Connect success") },
-            onFailure = { _uiState.value = UiState.Error("Connect failed: $it") }
+            onFailure = { 
+                _uiState.value = UiState.Error("Connect failed: $it")
+                notificationHelper.showConnectionFailedNotification("Connect failed: $it")
+            }
         )
     }
 
     fun onConnectionInfoAvailable(info: WifiP2pInfo) {
         if (info.groupFormed) {
+            if (_uiState.value !is UiState.Connected) {
+                notificationHelper.showConnectedNotification()
+            }
             viewModelScope.launch {
                 socketClient.connect()
             }
             _uiState.value = UiState.Connected
         } else {
+            if (_uiState.value is UiState.Connected) {
+                notificationHelper.showDisconnectedNotification()
+            }
             socketClient.disconnect()
             _uiState.value = UiState.Idle
         }
@@ -68,7 +82,12 @@ class MainViewModel(
 
     fun disconnect() {
         p2pManager.disconnect(
-            onSuccess = { _uiState.value = UiState.Idle },
+            onSuccess = { 
+                if (_uiState.value is UiState.Connected) {
+                    notificationHelper.showDisconnectedNotification()
+                }
+                _uiState.value = UiState.Idle 
+            },
             onFailure = { }
         )
         socketClient.disconnect()

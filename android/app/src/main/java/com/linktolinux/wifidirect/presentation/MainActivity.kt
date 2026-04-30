@@ -30,6 +30,7 @@ import com.linktolinux.wifidirect.presentation.ui.HomeScreen
 import com.linktolinux.wifidirect.presentation.ui.DiscoveryScreen
 import com.linktolinux.wifidirect.presentation.ui.Screen3
 import com.linktolinux.wifidirect.presentation.ui.LinkToLinuxTheme
+import com.linktolinux.wifidirect.notifications.NotificationHelper
 
 class MainActivity : AppCompatActivity() {
 
@@ -47,6 +48,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Initialize Notification Channel
+        NotificationHelper.createNotificationChannel(this)
         
         prefs = getSharedPreferences("link_to_linux_prefs", Context.MODE_PRIVATE)
         
@@ -121,6 +125,7 @@ class MainActivity : AppCompatActivity() {
     private fun checkPermissionsAndDiscover() {
         val perms = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.POST_NOTIFICATIONS)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
             }
