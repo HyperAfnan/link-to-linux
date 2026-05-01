@@ -23,6 +23,7 @@ class MainViewModel(
     private val TAG = "MainViewModel"
     private val socketClient = SocketClient()
     private val notificationHelper = NotificationHelper(application)
+    private var discoveryActive = false
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -61,10 +62,17 @@ class MainViewModel(
     val incomingMessages = socketClient.incomingMessages
 
     fun startDiscovery() {
+        if (discoveryActive || _uiState.value is UiState.Scanning || _uiState.value is UiState.Connecting) {
+            Log.d(TAG, "Ignoring duplicate discovery request")
+            return
+        }
+
+        discoveryActive = true
         _uiState.value = UiState.Scanning
         p2pManager.discoverPeers(
             onSuccess = { Log.d(TAG, "Discovery success") },
             onFailure = { 
+                discoveryActive = false
                 _uiState.value = UiState.Error("Discovery failed: $it")
                 notificationHelper.showConnectionFailedNotification("Discovery failed: $it")
             }
@@ -79,6 +87,7 @@ class MainViewModel(
     }
 
     fun connectToDevice(device: WifiP2pDevice) {
+        discoveryActive = false
         _uiState.value = UiState.Connecting(device)
         p2pManager.connect(
             device,
@@ -114,6 +123,7 @@ class MainViewModel(
     }
 
     fun disconnect() {
+        discoveryActive = false
         p2pManager.disconnect(
             onSuccess = { 
                 if (_uiState.value is UiState.Connected) {
@@ -127,6 +137,7 @@ class MainViewModel(
     }
 
     fun stopDiscovery() {
+        discoveryActive = false
         p2pManager.stopDiscovery()
     }
 
@@ -151,6 +162,7 @@ class MainViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        discoveryActive = false
         socketClient.disconnect()
     }
 }

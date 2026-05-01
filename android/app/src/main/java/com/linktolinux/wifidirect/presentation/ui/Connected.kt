@@ -27,7 +27,7 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Screen3(
+fun Connected(
     deviceName: String,
     onDisconnectClick: () -> Unit,
     onRenameClick: () -> Unit,

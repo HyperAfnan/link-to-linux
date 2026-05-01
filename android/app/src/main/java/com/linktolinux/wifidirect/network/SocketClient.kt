@@ -20,7 +20,6 @@ import java.net.Socket
 
 class SocketClient {
     private val tag = "SocketClient"
-    private val serverIp = "192.168.49.1"
     private val serverPort = 5005
 
     private var socket: Socket? = null
@@ -53,6 +52,7 @@ class SocketClient {
          _connectionState.value = State.Connecting
          val newSocket = Socket()
          newSocket.soTimeout = 15000
+         Log.i(tag, "Connecting to server at $serverIp:$serverPort with 10s timeout")
          newSocket.connect(InetSocketAddress(serverIp, serverPort), 10000)
          socket = newSocket
 

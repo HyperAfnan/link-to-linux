@@ -2,8 +2,10 @@ package com.linktolinux.wifidirect.presentation
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pManager
@@ -16,6 +18,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,7 +31,7 @@ import com.linktolinux.wifidirect.presentation.viewmodel.MainViewModel
 import com.linktolinux.wifidirect.presentation.viewmodel.MainViewModelFactory
 import com.linktolinux.wifidirect.presentation.ui.HomeScreen
 import com.linktolinux.wifidirect.presentation.ui.DiscoveryScreen
-import com.linktolinux.wifidirect.presentation.ui.Screen3
+import com.linktolinux.wifidirect.presentation.ui.Connected
 import com.linktolinux.wifidirect.presentation.ui.LinkToLinuxTheme
 import com.linktolinux.wifidirect.notifications.NotificationHelper
 import com.linktolinux.wifidirect.p2p.P2pEventCallback
@@ -62,62 +65,61 @@ class MainActivity : AppCompatActivity(), P2pEventCallback {
         setContent {
             val uiState by viewModel.uiState.collectAsState()
             val nearbyDevices by viewModel.nearbyDevices.collectAsState()
+            val savedName = prefs.getString("saved_name", null)
+            val savedMac = prefs.getString("saved_mac", null)
             
-            LinkToLinuxTheme {
+            var isDynamicColorEnabled by remember { mutableStateOf(prefs.getBoolean("dynamic_color", true)) }
+            var customColorValue by remember { mutableStateOf(prefs.getInt("custom_color", 0xFF0F4C3A.toInt())) }
+            var themeMode by remember { mutableStateOf(prefs.getInt("theme_mode", 0)) } // 0=System, 1=Light, 2=Dark
+            
+            val isDark = when (themeMode) {
+                1 -> false
+                2 -> true
+                else -> isSystemInDarkTheme()
+            }
+            
+            LinkToLinuxTheme(
+                darkTheme = isDark,
+                dynamicColor = isDynamicColorEnabled,
+                customColor = androidx.compose.ui.graphics.Color(customColorValue)
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(uiState, nearbyDevices)
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun AppNavigation(uiState: MainViewModel.UiState, nearbyDevices: List<WifiP2pDevice>) {
-        val savedName = prefs.getString("saved_name", null)
-        val savedMac = prefs.getString("saved_mac", null)
-
-        when (uiState) {
-            is MainViewModel.UiState.Connected -> {
-                Screen3(
-                    deviceName = savedName ?: "Linux PC",
-                    onDisconnectClick = { viewModel.disconnect() },
-                    onRenameClick = { /* implement dialog */ },
-                    onFeatureClick = { feature ->
-                        viewModel.sendMessage("FEATURE_CLICK", feature)
-                    }
-                )
-            }
-            is MainViewModel.UiState.Scanning, is MainViewModel.UiState.Idle, is MainViewModel.UiState.Error -> {
-                if (uiState is MainViewModel.UiState.Scanning || nearbyDevices.isNotEmpty()) {
-                    DiscoveryScreen(
-                        devices = nearbyDevices,
-                        isScanning = uiState is MainViewModel.UiState.Scanning,
-                        onDeviceClick = { device -> viewModel.connectToDevice(device) }
-                    )
-                } else {
-                    HomeScreen(
-                        savedDeviceName = savedName,
-                        savedDeviceMac = savedMac,
+                    com.linktolinux.wifidirect.presentation.ui.MainScreen(
+                        uiState = uiState,
+                        nearbyDevices = nearbyDevices,
+                        savedName = savedName,
+                        savedMac = savedMac,
                         onFindNearbyClick = { checkPermissionsAndDiscover() },
-                        onSavedDeviceClick = { /* Handle saved device click if needed */ }
+                        onDeviceClick = { device -> viewModel.connectToDevice(device) },
+                        onDisconnectClick = { viewModel.disconnect() },
+                        onFeatureClick = { feature -> viewModel.sendMessage("FEATURE_CLICK", feature) },
+                        isDynamicColorEnabled = isDynamicColorEnabled,
+                        onDynamicColorChange = {
+                            isDynamicColorEnabled = it
+                            prefs.edit().putBoolean("dynamic_color", it).apply()
+                        },
+                        customColorValue = customColorValue,
+                        onCustomColorChange = {
+                            customColorValue = it
+                            prefs.edit().putInt("custom_color", it).apply()
+                        },
+                        themeMode = themeMode,
+                        onThemeModeChange = {
+                            themeMode = it
+                            prefs.edit().putInt("theme_mode", it).apply()
+                        }
                     )
                 }
             }
-            is MainViewModel.UiState.Connecting -> {
-                DiscoveryScreen(
-                    devices = nearbyDevices,
-                    isScanning = true,
-                    onDeviceClick = {}
-                )
-            }
-        }
-        
-        if (uiState is MainViewModel.UiState.Error) {
-            LaunchedEffect(uiState) {
-                Toast.makeText(this@MainActivity, uiState.message, Toast.LENGTH_SHORT).show()
+            
+            val currentState = uiState
+            if (currentState is MainViewModel.UiState.Error) {
+                LaunchedEffect(currentState) {
+                    Toast.makeText(this@MainActivity, currentState.message, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
