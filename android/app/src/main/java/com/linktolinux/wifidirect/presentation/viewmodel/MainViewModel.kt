@@ -1,143 +1,110 @@
 package com.linktolinux.wifidirect.presentation.viewmodel
 
-import android.app.Application
 import android.net.wifi.p2p.WifiP2pDevice
-import android.net.wifi.p2p.WifiP2pInfo
 import android.util.Log
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.linktolinux.wifidirect.clipboard.ClipboardHelper
 import com.linktolinux.wifidirect.network.SocketClient
 import com.linktolinux.wifidirect.network.models.SocketMessage
-import com.linktolinux.wifidirect.p2p.WiFiDirectManager
 import com.linktolinux.wifidirect.notifications.NotificationHelper
+import com.linktolinux.wifidirect.p2p.P2pState
+import com.linktolinux.wifidirect.p2p.WiFiDirectManager
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class MainViewModel(
-    application: Application,
-    private val p2pManager: WiFiDirectManager
-) : AndroidViewModel(application) {
+    private val p2pManager: WiFiDirectManager,
+    private val socketClient: SocketClient,
+    private val notificationHelper: NotificationHelper,
+    private val clipboardHelper: ClipboardHelper
+) : ViewModel() {
     
     private val TAG = "MainViewModel"
-    private val socketClient = SocketClient()
-    private val notificationHelper = NotificationHelper(application)
-    private var discoveryActive = false
-
-    private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private val _nearbyDevices = MutableStateFlow<List<WifiP2pDevice>>(emptyList())
-    val nearbyDevices: StateFlow<List<WifiP2pDevice>> = _nearbyDevices.asStateFlow()
+    val nearbyDevices: StateFlow<List<WifiP2pDevice>> = _nearbyDevices
+
+    val uiState: StateFlow<UiState> = combine(
+        p2pManager.p2pState,
+        socketClient.connectionState
+    ) { p2pState, socketState ->
+        when (p2pState) {
+            is P2pState.Idle -> UiState.Idle
+            is P2pState.Discovering -> UiState.Scanning
+            is P2pState.Connecting -> UiState.Connecting(p2pState.device)
+            is P2pState.PeersDiscovered -> {
+                _nearbyDevices.value = p2pState.peers
+                UiState.Idle
+            }
+            is P2pState.Connected -> {
+                // If we are P2P connected, we show connected UI even if socket is disconnected/reconnecting
+                // The socket handles its own reconnection or UI can show "Connecting socket..." later
+                UiState.Connected
+            }
+            is P2pState.Error -> {
+                notificationHelper.showConnectionFailedNotification(p2pState.message)
+                UiState.Error(p2pState.message)
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Idle)
 
     init {
-        observeSocketState()
+        observeP2pState()
     }
 
-    private fun observeSocketState() {
+    private fun observeP2pState() {
         viewModelScope.launch {
-            socketClient.connectionState.collect { state ->
+            p2pManager.p2pState.collect { state ->
                 when (state) {
-                    is SocketClient.State.Connected -> {
-                        _uiState.value = UiState.Connected
-                    }
-                    is SocketClient.State.Disconnected -> {
-                        if (_uiState.value is UiState.Connected) {
-                            _uiState.value = UiState.Idle
+                    is P2pState.Connected -> {
+                        notificationHelper.showConnectedNotification()
+                        clipboardHelper.copyTextToClipboard("hello world")
+                        val goIp = state.info.groupOwnerAddress?.hostAddress
+                        if (!state.info.isGroupOwner && goIp != null) {
+                            socketClient.connect(goIp)
                         }
                     }
-                    is SocketClient.State.Error -> {
-                        _uiState.value = UiState.Error("Network error: ${state.message}")
-                        notificationHelper.showConnectionFailedNotification("Network error: ${state.message}")
+                    is P2pState.Idle -> {
+                        socketClient.disconnect()
                     }
-                    is SocketClient.State.Connecting -> {
-                        // Optionally update UI for network-level connecting
-                    }
+                    else -> {}
                 }
             }
         }
     }
-
-    val incomingMessages = socketClient.incomingMessages
 
     fun startDiscovery() {
-        if (discoveryActive || _uiState.value is UiState.Scanning || _uiState.value is UiState.Connecting) {
-            Log.d(TAG, "Ignoring duplicate discovery request")
+        if (uiState.value is UiState.Scanning || uiState.value is UiState.Connecting) {
             return
         }
-
-        discoveryActive = true
-        _uiState.value = UiState.Scanning
-        p2pManager.discoverPeers(
-            onSuccess = { Log.d(TAG, "Discovery success") },
-            onFailure = { 
-                discoveryActive = false
-                _uiState.value = UiState.Error("Discovery failed: $it")
-                notificationHelper.showConnectionFailedNotification("Discovery failed: $it")
-            }
-        )
+        p2pManager.discoverPeers()
     }
 
-    fun onPeersAvailable(peers: List<WifiP2pDevice>) {
-        _nearbyDevices.value = peers
-        if (_uiState.value is UiState.Scanning) {
-            _uiState.value = UiState.Idle
-        }
-    }
+    private var connectJob: kotlinx.coroutines.Job? = null
 
     fun connectToDevice(device: WifiP2pDevice) {
-        discoveryActive = false
-        _uiState.value = UiState.Connecting(device)
-        p2pManager.connect(
-            device,
-            onSuccess = { 
-               Log.d(TAG, "Connect success")
-            },
-            onFailure = { 
-                _uiState.value = UiState.Error("Connect failed: $it")
-                notificationHelper.showConnectionFailedNotification("Connect failed: $it")
+        p2pManager.connect(device)
+        connectJob?.cancel()
+        connectJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(10000)
+            if (uiState.value is UiState.Connecting) {
+                p2pManager.timeoutConnection()
             }
-        )
-    }
-
-    fun onConnectionInfoAvailable(info: WifiP2pInfo) {
-        if (info.groupFormed) {
-            // Only trigger connect if we are not already connected at the P2P level
-            if (_uiState.value !is UiState.Connected) {
-                notificationHelper.showConnectedNotification()
-                viewModelScope.launch {
-                  val goIp = info.groupOwnerAddress?.hostAddress
-                  if (!info.isGroupOwner && goIp != null) {
-                     socketClient.connect(goIp)
-                  }
-                }
-            }
-        } else {
-            if (_uiState.value is UiState.Connected) {
-                notificationHelper.showDisconnectedNotification()
-            }
-            socketClient.disconnect()
-            _uiState.value = UiState.Idle
         }
     }
 
     fun disconnect() {
-        discoveryActive = false
-        p2pManager.disconnect(
-            onSuccess = { 
-                if (_uiState.value is UiState.Connected) {
-                    notificationHelper.showDisconnectedNotification()
-                }
-                _uiState.value = UiState.Idle 
-            },
-            onFailure = { }
-        )
+        p2pManager.disconnect()
         socketClient.disconnect()
+        notificationHelper.showDisconnectedNotification()
     }
 
     fun stopDiscovery() {
-        discoveryActive = false
         p2pManager.stopDiscovery()
     }
 
@@ -162,7 +129,6 @@ class MainViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        discoveryActive = false
         socketClient.disconnect()
     }
 }

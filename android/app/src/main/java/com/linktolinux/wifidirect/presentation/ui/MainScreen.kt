@@ -70,7 +70,8 @@ fun MainScreen(
                 composable(NavRoute.Discovery.route) {
                     DiscoveryScreen(
                         devices = nearbyDevices,
-                        isScanning = uiState is MainViewModel.UiState.Scanning || uiState is MainViewModel.UiState.Connecting,
+                        isScanning = uiState is MainViewModel.UiState.Scanning,
+                        connectingDevice = if (uiState is MainViewModel.UiState.Connecting) uiState.device else null,
                         onDeviceClick = onDeviceClick,
                         onRetryClick = onFindNearbyClick
                     )

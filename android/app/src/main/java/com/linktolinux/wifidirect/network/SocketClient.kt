@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.Channel
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
@@ -34,6 +35,9 @@ class SocketClient {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var listenJob: Job? = null
+    private var writeJob: Job? = null
+    
+    private val messageQueue = Channel<SocketMessage>(Channel.BUFFERED)
 
     private val jsonConfig = Json { ignoreUnknownKeys = true }
 
@@ -51,7 +55,7 @@ class SocketClient {
       try {
          _connectionState.value = State.Connecting
          val newSocket = Socket()
-         newSocket.soTimeout = 15000
+         newSocket.keepAlive = true
          Log.i(tag, "Connecting to server at $serverIp:$serverPort with 10s timeout")
          newSocket.connect(InetSocketAddress(serverIp, serverPort), 10000)
          socket = newSocket
@@ -61,11 +65,12 @@ class SocketClient {
 
          _connectionState.value = State.Connected
          startListening()
+         startWriting()
       } catch (e: Exception) {
          _connectionState.value = State.Error(e.message ?: "Unknown error")
          disconnect()
       }
-}
+    }
 
     private fun startListening() {
         listenJob?.cancel()
@@ -91,20 +96,37 @@ class SocketClient {
         }
     }
 
-    suspend fun sendMessage(message: SocketMessage) = withContext(Dispatchers.IO) {
+    private fun startWriting() {
+        writeJob?.cancel()
+        writeJob = scope.launch {
+            try {
+                for (message in messageQueue) {
+                    if (!isActive) break
+                    val json = Json.encodeToString(message)
+                    writer?.write(json)
+                    writer?.write("\n")
+                    writer?.flush()
+                    Log.d(tag, "Sent: $json")
+                }
+            } catch (e: Exception) {
+                Log.e(tag, "Write loop error: ${e.message}", e)
+            } finally {
+                disconnect()
+            }
+        }
+    }
+
+    suspend fun sendMessage(message: SocketMessage) {
         try {
-            val json = Json.encodeToString(message)
-            writer?.write(json)
-            writer?.write("\n")
-            writer?.flush()
-            Log.d(tag, "Sent: $json")
+            messageQueue.send(message)
         } catch (e: Exception) {
-            Log.e(tag, "Send failed: ${e.message}", e)
+            Log.e(tag, "Failed to enqueue message: ${e.message}", e)
         }
     }
 
     fun disconnect() {
         listenJob?.cancel()
+        writeJob?.cancel()
         _connectionState.value = State.Disconnected
         try {
             writer?.close()

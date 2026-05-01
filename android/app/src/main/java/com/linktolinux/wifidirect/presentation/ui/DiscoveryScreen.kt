@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 fun DiscoveryScreen(
     devices: List<WifiP2pDevice>,
     isScanning: Boolean,
+    connectingDevice: WifiP2pDevice? = null,
     onDeviceClick: (WifiP2pDevice) -> Unit,
     onRetryClick: () -> Unit
 ) {
@@ -117,7 +118,11 @@ fun DiscoveryScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 devices.forEach { device ->
-                    DeviceItem(device = device, onClick = { onDeviceClick(device) })
+                    DeviceItem(
+                        device = device, 
+                        isConnecting = connectingDevice?.deviceAddress == device.deviceAddress,
+                        onClick = { onDeviceClick(device) }
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
@@ -150,8 +155,9 @@ fun DiscoveryScreen(
 }
 
 @Composable
-fun DeviceItem(device: WifiP2pDevice, onClick: () -> Unit) {
-    val deviceName = device.deviceName.ifBlank { "Unknown Device" }
+fun DeviceItem(device: WifiP2pDevice, isConnecting: Boolean = false, onClick: () -> Unit) {
+    val rawName = device.deviceName.ifBlank { "Unknown Device" }
+    val deviceName = rawName.replace(Regex("^\\[.*?\\]\\s*"), "")
     val icon = if (deviceName.contains("laptop", ignoreCase = true)) {
         Icons.Default.Laptop
     } else {
@@ -226,17 +232,28 @@ fun DeviceItem(device: WifiP2pDevice, onClick: () -> Unit) {
             // Pair Button
             Button(
                 onClick = onClick,
+                enabled = !isConnecting,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(20.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Link,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Pair", fontWeight = FontWeight.Medium)
+                if (isConnecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Pairing", fontWeight = FontWeight.Medium)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Link,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Pair", fontWeight = FontWeight.Medium)
+                }
             }
         }
     }

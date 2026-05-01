@@ -140,18 +140,10 @@ fun HomeScreen(
                 onClick = onSavedDeviceClick
             )
         } else {
-            KnownDeviceItem(
-                name = "Workstation",
-                subtext = "Last seen: Home PC • 2 hrs ago",
-                icon = Icons.Default.Computer,
-                onClick = {}
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            KnownDeviceItem(
-                name = "My Laptop",
-                subtext = "Last seen: Office • Yesterday",
-                icon = Icons.Default.Laptop,
-                onClick = {}
+            Text(
+                text = "No saved devices yet. Scan the network to find and pair with your Linux machine.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp
             )
         }
         

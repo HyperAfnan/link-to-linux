@@ -1,14 +1,12 @@
 package com.linktolinux.wifidirect.presentation.ui
 
-import androidx.compose.animation.core.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,12 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,40 +83,17 @@ fun Connected(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                item { FeatureCard("clipboard") { onFeatureClick("clipboard") } }
-                item { FeatureCard("share files") { onFeatureClick("share files") } }
-                item { FeatureCard("notification sync") { onFeatureClick("notification sync") } }
-                
-                // Placeholders
-                item { EmptyFeatureCard() }
-                item { EmptyFeatureCard() }
-                item { EmptyFeatureCard() }
+                item { FeatureCard("Clipboard") { onFeatureClick("clipboard") } }
+                item { FeatureCard("Share Files") { onFeatureClick("share files") } }
+                item { FeatureCard("Notification Sync") { onFeatureClick("notification sync") } }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaIndicatorCard() {
-    val scrollState = rememberScrollState()
-    
-    // Auto-scroll marquee effect
-    LaunchedEffect(Unit) {
-        while (true) {
-            if (scrollState.maxValue > 0) {
-                scrollState.animateScrollTo(
-                    value = scrollState.maxValue,
-                    animationSpec = tween(durationMillis = 3000, easing = LinearEasing)
-                )
-                delay(1000)
-                scrollState.scrollTo(0)
-                delay(500)
-            } else {
-                delay(1000)
-            }
-        }
-    }
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -162,7 +133,7 @@ fun MediaIndicatorCard() {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                modifier = Modifier.horizontalScroll(scrollState)
+                modifier = Modifier.basicMarquee()
             )
         }
     }
@@ -191,17 +162,4 @@ fun FeatureCard(title: String, onClick: () -> Unit) {
             )
         }
     }
-}
-
-@Composable
-fun EmptyFeatureCard() {
-    Box(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .border(
-                width = 2.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(24.dp)
-            )
-    )
 }
