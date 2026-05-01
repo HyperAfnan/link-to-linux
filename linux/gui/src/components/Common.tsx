@@ -1,5 +1,5 @@
 import { PhoneIcon, ReloadIcon, SpinnerIcon, CheckIcon, TrashIcon } from "./Icons";
-import { Device, ErrorKind } from "../types";
+import { Device } from "../types";
 import { useEffect } from "react";
 
 export function ScanButton({ scanning, onClick }: { scanning: boolean; onClick: () => void }) {

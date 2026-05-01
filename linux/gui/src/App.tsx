@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { TopBar } from "./components/TopBar";
 import { DeviceCard } from "./components/DeviceCard";
 import { 
@@ -30,6 +31,18 @@ function App() {
 
   const { lastMessage } = useSocket();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; mac: string } | null>(null);
+
+  useEffect(() => {
+    if (lastMessage) {
+      const ack = {
+        type: "ACK",
+        sender_id: "linux_pc",
+        payload: `ACK for ${lastMessage.type}`,
+        timestamp: Date.now(),
+      };
+      invoke("send_socket_message", { payload: ack }).catch(console.error);
+    }
+  }, [lastMessage]);
 
   const isPermissionError = error?.toLowerCase().includes("permission denied");
 

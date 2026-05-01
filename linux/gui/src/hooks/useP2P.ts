@@ -19,12 +19,29 @@ export function useP2P() {
       .catch((err) => setError(err as string));
 
     // Listen for incoming pairing requests
-    const unlisten = listen<Device>("pairing-request", (event) => {
+    const unlistenPairing = listen<Device>("pairing-request", (event) => {
       setIncomingRequest(event.payload);
     });
 
+    const unlistenConnection = listen<{ status: string; mac_address: string }>("connection_status", async (event) => {
+      setConnectingMac(null);
+      if (event.payload.status === "success") {
+        setConnectedMac(event.payload.mac_address);
+        // Refresh previous devices list since a new connection likely wrote to disk
+        try {
+          const updated = await invoke<Device[]>("get_previous_devices");
+          setPreviousDevices(updated);
+        } catch (err) {
+          console.error("Failed to load previous devices", err);
+        }
+      } else {
+        setError(`Failed to connect to ${event.payload.mac_address}`);
+      }
+    });
+
     return () => {
-      unlisten.then((f) => f());
+      unlistenPairing.then((f) => f());
+      unlistenConnection.then((f) => f());
     };
   }, []);
 
@@ -47,12 +64,8 @@ export function useP2P() {
     setError(null);
     try {
       await invoke("connect_to_peer", { mac, name });
-      setConnectedMac(mac);
-      const updated = await invoke<Device[]>("get_previous_devices");
-      setPreviousDevices(updated);
     } catch (err) {
       setError(err as string);
-    } finally {
       setConnectingMac(null);
     }
   };
@@ -61,19 +74,17 @@ export function useP2P() {
     if (!incomingRequest) return;
     const mac = incomingRequest.mac_address;
     setIncomingRequest(null);
-    if (accept) setConnectingMac(mac);
+    
+    if (accept) {
+      setConnectingMac(mac);
+      setError(null);
+    }
 
     try {
-      const success = await invoke<boolean>("respond_to_pairing_request", { mac, accept });
-      if (accept && success) {
-        setConnectedMac(mac);
-        const updated = await invoke<Device[]>("get_previous_devices");
-        setPreviousDevices(updated);
-      }
+      await invoke("respond_to_pairing_request", { mac, accept });
     } catch (err) {
       setError(err as string);
-    } finally {
-      setConnectingMac(null);
+      if (accept) setConnectingMac(null);
     }
   };
 

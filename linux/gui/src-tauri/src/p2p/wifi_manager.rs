@@ -1,21 +1,20 @@
-use std::process::Command;
+use std::fs;
+use tauri::{AppHandle, Manager};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 use std::process::Stdio;
-use std::io::{BufRead, BufReader};
-use std::thread;
 use std::time::Duration;
 use crate::models::Device;
-use std::fs;
-use tauri::{AppHandle, Emitter};
-use tauri::Manager;
 
 pub const P2P_IFACE: &str = "p2p-dev-wlan0";
 
-pub fn execute_wpa_cli(args: &[&str]) -> Result<String, String> {
+pub async fn execute_wpa_cli(args: &[&str]) -> Result<String, String> {
     let output = Command::new("wpa_cli")
         .arg("-p")
         .arg("/run/wpa_supplicant")
         .args(args)
         .output()
+        .await
         .map_err(|e| format!("Failed to execute wpa_cli process: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -35,14 +34,40 @@ pub fn execute_wpa_cli(args: &[&str]) -> Result<String, String> {
     Ok(stdout)
 }
 
+pub async fn get_device_name(iface: &str, mac: &str) -> String {
+    execute_wpa_cli(&["-i", iface, "p2p_peer", mac])
+        .await
+        .ok()
+        .and_then(|details| {
+            details
+                .lines()
+                .find(|l| l.starts_with("device_name="))
+                .map(|l| l.replace("device_name=", "").trim().to_string())
+        })
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "Unknown Device".to_string())
+}
+
+pub async fn wait_for_connection(iface: &str, mac: &str) -> Result<bool, String> {
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        if let Ok(details) = execute_wpa_cli(&["-i", iface, "p2p_peer", mac]).await {
+            if details.contains("p2p_status=connected") || details.contains("status=connected") {
+                return Ok(true);
+            }
+        }
+    }
+    Err("Connection timed out. Handshake did not complete.".to_string())
+}
+
 pub async fn scan_peers() -> Result<Vec<Device>, String> {
     let iface = P2P_IFACE;
 
-    execute_wpa_cli(&["-i", iface, "p2p_find"])?;
+    execute_wpa_cli(&["-i", iface, "p2p_find"]).await?;
     tokio::time::sleep(Duration::from_secs(10)).await;
-    let _ = execute_wpa_cli(&["-i", iface, "p2p_stop_find"]);
+    let _ = execute_wpa_cli(&["-i", iface, "p2p_stop_find"]).await;
 
-    let peers_output = execute_wpa_cli(&["-i", iface, "p2p_peers"])?;
+    let peers_output = execute_wpa_cli(&["-i", iface, "p2p_peers"]).await?;
     let mut devices = Vec::new();
 
     for mac in peers_output.lines() {
@@ -51,16 +76,7 @@ pub async fn scan_peers() -> Result<Vec<Device>, String> {
             continue;
         }
 
-        let name = execute_wpa_cli(&["-i", iface, "p2p_peer", mac])
-            .ok()
-            .and_then(|details| {
-                details
-                    .lines()
-                    .find(|l| l.starts_with("device_name="))
-                    .map(|l| l.replace("device_name=", "").trim().to_string())
-            })
-            .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| "Unknown Device".to_string());
+        let name = get_device_name(iface, mac).await;
 
         devices.push(Device {
             name,
@@ -110,8 +126,8 @@ pub fn persist_device(app: &AppHandle, device: &Device) -> Result<(), String> {
     Ok(())
 }
 
-pub fn start_wpa_monitor(app: AppHandle) {
-    thread::spawn(move || {
+pub fn start_wpa_monitor(tx: tokio::sync::mpsc::Sender<Device>) {
+    tauri::async_runtime::spawn(async move {
         let iface = if std::path::Path::new("/run/wpa_supplicant/p2p-dev-wlan0").exists() {
             "p2p-dev-wlan0"
         } else {
@@ -125,33 +141,28 @@ pub fn start_wpa_monitor(app: AppHandle) {
             .expect("Failed to start wpa_cli interactive monitor");
 
         let stdout = child.stdout.take().unwrap();
-        let reader = BufReader::new(stdout);
+        let mut reader = BufReader::new(stdout).lines();
 
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                if line.contains("P2P-PROV-DISC-PBC-REQ") || 
-                   line.contains("P2P-GO-NEG-REQUEST") ||
-                   line.contains("P2P-PROV-DISC-ENTER-PIN") {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    for part in parts {
-                        let clean = part.trim_matches(|c: char| !c.is_alphanumeric() && c != ':');
-                        if clean.len() == 17 && clean.contains(':') {
-                             let name = execute_wpa_cli(&["-i", &iface, "p2p_peer", clean])
-                                .ok()
-                                .and_then(|details| {
-                                    details.lines()
-                                        .find(|l| l.starts_with("device_name="))
-                                        .map(|l| l.replace("device_name=", "").trim().to_string())
-                                })
-                                .filter(|n| !n.is_empty())
-                                .unwrap_or_else(|| "Incoming Request".to_string());
+        while let Ok(Some(line)) = reader.next_line().await {
+            if line.contains("P2P-PROV-DISC-PBC-REQ") || 
+               line.contains("P2P-GO-NEG-REQUEST") ||
+               line.contains("P2P-PROV-DISC-ENTER-PIN") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                for part in parts {
+                    let clean = part.trim_matches(|c: char| !c.is_alphanumeric() && c != ':');
+                    if clean.len() == 17 && clean.contains(':') {
+                         let name = get_device_name(iface, clean).await;
+                         let name = if name == "Unknown Device" {
+                             "Incoming Request".to_string()
+                         } else {
+                             name
+                         };
 
-                             let _ = app.emit("pairing-request", Device {
-                                name,
-                                mac_address: clean.to_string(),
-                            });
-                             break;
-                        }
+                         let _ = tx.send(Device {
+                            name,
+                            mac_address: clean.to_string(),
+                        }).await;
+                         break;
                     }
                 }
             }
