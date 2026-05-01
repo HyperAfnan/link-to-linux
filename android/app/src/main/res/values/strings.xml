@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Link to Linux</string>
+    <string name="notification_channel_discovery_name">Device Discovery</string>
+    <string name="notification_channel_discovery_description">Notifications when searching for Linux devices</string>
+    <string name="notification_discovery_title">Searching for Devices</string>
+    <string name="notification_discovery_content">Link to Linux is looking for nearby devices...</string>
+    <string name="notification_connected_title">Connection Established</string>
+    <string name="notification_connected_content">Successfully connected to Linux device.</string>
+    <string name="notification_disconnected_title">Connection Closed</string>
+    <string name="notification_disconnected_content">The connection to the Linux device has been closed.</string>
+    <string name="notification_failed_title">Connection Failed</string>
+    <string name="notification_failed_content">Failed to establish connection. Please try again.</string>
 </resources>

@@ -31,17 +31,16 @@ import com.linktolinux.wifidirect.presentation.ui.DiscoveryScreen
 import com.linktolinux.wifidirect.presentation.ui.Screen3
 import com.linktolinux.wifidirect.presentation.ui.LinkToLinuxTheme
 import com.linktolinux.wifidirect.notifications.NotificationHelper
+import com.linktolinux.wifidirect.p2p.P2pEventCallback
+import android.net.wifi.p2p.WifiP2pInfo
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), P2pEventCallback {
 
     private lateinit var p2pManager: WiFiDirectManager
     private lateinit var receiver: WiFiDirectBroadcastReceiver
     private lateinit var prefs: SharedPreferences
 
     private val viewModel: MainViewModel by viewModels {
-        val manager = getSystemService(WIFI_P2P_SERVICE) as WifiP2pManager
-        val channel = manager.initialize(this, mainLooper, null)
-        p2pManager = WiFiDirectManager(manager, channel)
         MainViewModelFactory(application, p2pManager)
     }
 
@@ -49,15 +48,16 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
+        // Initialize Hardware Eagerly
+        val manager = getSystemService(WIFI_P2P_SERVICE) as WifiP2pManager
+        val channel = manager.initialize(this, mainLooper, null)
+        p2pManager = WiFiDirectManager(manager, channel)
+        receiver = WiFiDirectBroadcastReceiver(manager, channel, this)
+        
         // Initialize Notification Channel
         NotificationHelper.createNotificationChannel(this)
         
         prefs = getSharedPreferences("link_to_linux_prefs", Context.MODE_PRIVATE)
-        
-        // Setup P2P Receiver
-        val wifiManager = getSystemService(WIFI_P2P_SERVICE) as WifiP2pManager
-        val channel = wifiManager.initialize(this, mainLooper, null)
-        receiver = WiFiDirectBroadcastReceiver(wifiManager, channel, this)
 
         setContent {
             val uiState by viewModel.uiState.collectAsState()
@@ -132,7 +132,9 @@ class MainActivity : AppCompatActivity() {
         }.toTypedArray()
 
         if (perms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
+            Log.d("MainActivity", "All permissions granted, starting discovery")
             viewModel.startDiscovery()
+            Log.d("MainActivity", "Discovery started")
         } else {
             permissionLauncher.launch(perms)
         }
@@ -143,23 +145,27 @@ class MainActivity : AppCompatActivity() {
             if (results.values.all { it }) viewModel.startDiscovery()
         }
 
-    // Callbacks for BroadcastReceiver
-    fun onP2pStateChanged(enabled: Boolean) {
+    // Callbacks for P2pEventCallback
+    override fun onP2pStateChanged(enabled: Boolean) {
         if (!enabled) Toast.makeText(this, "Please enable Wi-Fi", Toast.LENGTH_SHORT).show()
     }
 
-    fun onP2pDisconnected() = viewModel.disconnect()
+    override fun onPeersChanged() {
+        p2pManager.requestPeers { peerList ->
+            viewModel.onPeersAvailable(peerList.deviceList.toList())
+        }
+    }
 
-    fun onThisDeviceChanged(device: WifiP2pDevice) {
+    override fun onConnectionChanged(info: WifiP2pInfo?, groupFormed: Boolean) {
+        if (groupFormed && info != null) {
+            viewModel.onConnectionInfoAvailable(info)
+        } else {
+            viewModel.disconnect()
+        }
+    }
+
+    override fun onThisDeviceChanged(device: WifiP2pDevice) {
         Log.d("MainActivity", "Device MAC: ${device.deviceAddress}")
-    }
-
-    val peerListListener = WifiP2pManager.PeerListListener { peerList ->
-        viewModel.onPeersAvailable(peerList.deviceList.toList())
-    }
-
-    val connectionInfoListener = WifiP2pManager.ConnectionInfoListener { info ->
-        viewModel.onConnectionInfoAvailable(info)
     }
 
     override fun onResume() {

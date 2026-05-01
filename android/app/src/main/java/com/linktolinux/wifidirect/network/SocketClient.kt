@@ -8,6 +8,9 @@ import com.linktolinux.wifidirect.network.models.SocketMessage
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
@@ -27,32 +30,42 @@ class SocketClient {
     private val _incomingMessages = MutableSharedFlow<SocketMessage>(extraBufferCapacity = 64)
     val incomingMessages = _incomingMessages.asSharedFlow()
 
+    private val _connectionState = MutableStateFlow<State>(State.Disconnected)
+    val connectionState: StateFlow<State> = _connectionState.asStateFlow()
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var listenJob: Job? = null
 
-    suspend fun connect() = withContext(Dispatchers.IO) {
-        try {
-            Log.d(tag, "Connecting to $serverIp:$serverPort...")
-            socket = Socket()
-            socket?.connect(InetSocketAddress(serverIp, serverPort), 10000)
-            
-            writer = BufferedWriter(OutputStreamWriter(socket?.getOutputStream(), "UTF-8"))
-            reader = BufferedReader(InputStreamReader(socket?.getInputStream(), "UTF-8"))
-            
-            Log.d(tag, "Connected to Linux Server!")
-            startListening()
-            
-            // Initial Handshake
-            sendMessage(SocketMessage(
-                type = "HANDSHAKE",
-                sender_id = android.os.Build.MODEL,
-                payload = "Hello from Android",
-                timestamp = System.currentTimeMillis() / 1000
-            ))
-        } catch (e: Exception) {
-            Log.e(tag, "Connection failed: ${e.message}", e)
-        }
+    private val jsonConfig = Json { ignoreUnknownKeys = true }
+
+    sealed class State {
+        object Disconnected : State()
+        object Connecting : State()
+        object Connected : State()
+        data class Error(val message: String) : State()
     }
+
+   suspend fun connect(serverIp: String) = withContext(Dispatchers.IO) {
+      if (_connectionState.value is State.Connecting || _connectionState.value is State.Connected) return@withContext
+      Log.d(tag, "Attempting to connect to $serverIp:$serverPort")
+
+      try {
+         _connectionState.value = State.Connecting
+         val newSocket = Socket()
+         newSocket.soTimeout = 15000
+         newSocket.connect(InetSocketAddress(serverIp, serverPort), 10000)
+         socket = newSocket
+
+         writer = BufferedWriter(OutputStreamWriter(newSocket.getOutputStream(), Charsets.UTF_8))
+         reader = BufferedReader(InputStreamReader(newSocket.getInputStream(), Charsets.UTF_8))
+
+         _connectionState.value = State.Connected
+         startListening()
+      } catch (e: Exception) {
+         _connectionState.value = State.Error(e.message ?: "Unknown error")
+         disconnect()
+      }
+}
 
     private fun startListening() {
         listenJob?.cancel()
@@ -62,7 +75,7 @@ class SocketClient {
                     val line = reader?.readLine() ?: break
                     if (line.isNotBlank()) {
                         try {
-                            val msg = Json.decodeFromString<SocketMessage>(line)
+                            val msg = jsonConfig.decodeFromString<SocketMessage>(line)
                             Log.d(tag, "Received: $msg")
                             _incomingMessages.emit(msg)
                         } catch (e: Exception) {
@@ -92,6 +105,7 @@ class SocketClient {
 
     fun disconnect() {
         listenJob?.cancel()
+        _connectionState.value = State.Disconnected
         try {
             writer?.close()
             reader?.close()

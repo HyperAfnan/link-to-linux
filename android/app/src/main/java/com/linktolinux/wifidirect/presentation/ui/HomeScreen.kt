@@ -93,7 +93,7 @@ fun HomeScreen(
                 .height(56.dp),
             shape = MaterialTheme.shapes.medium
         ) {
-            Text(text = "Find Other Device", fontSize = 16.sp)
+            Text(if (savedDeviceName != null) "Find Other Device" else "Find Nearby Device", fontSize = 16.sp)
         }
         
         Spacer(modifier = Modifier.height(48.dp))

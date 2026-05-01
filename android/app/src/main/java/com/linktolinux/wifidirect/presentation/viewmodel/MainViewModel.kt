@@ -30,6 +30,34 @@ class MainViewModel(
     private val _nearbyDevices = MutableStateFlow<List<WifiP2pDevice>>(emptyList())
     val nearbyDevices: StateFlow<List<WifiP2pDevice>> = _nearbyDevices.asStateFlow()
 
+    init {
+        observeSocketState()
+    }
+
+    private fun observeSocketState() {
+        viewModelScope.launch {
+            socketClient.connectionState.collect { state ->
+                when (state) {
+                    is SocketClient.State.Connected -> {
+                        _uiState.value = UiState.Connected
+                    }
+                    is SocketClient.State.Disconnected -> {
+                        if (_uiState.value is UiState.Connected) {
+                            _uiState.value = UiState.Idle
+                        }
+                    }
+                    is SocketClient.State.Error -> {
+                        _uiState.value = UiState.Error("Network error: ${state.message}")
+                        notificationHelper.showConnectionFailedNotification("Network error: ${state.message}")
+                    }
+                    is SocketClient.State.Connecting -> {
+                        // Optionally update UI for network-level connecting
+                    }
+                }
+            }
+        }
+    }
+
     val incomingMessages = socketClient.incomingMessages
 
     fun startDiscovery() {
@@ -54,7 +82,9 @@ class MainViewModel(
         _uiState.value = UiState.Connecting(device)
         p2pManager.connect(
             device,
-            onSuccess = { Log.d(TAG, "Connect success") },
+            onSuccess = { 
+               Log.d(TAG, "Connect success")
+            },
             onFailure = { 
                 _uiState.value = UiState.Error("Connect failed: $it")
                 notificationHelper.showConnectionFailedNotification("Connect failed: $it")
@@ -64,13 +94,16 @@ class MainViewModel(
 
     fun onConnectionInfoAvailable(info: WifiP2pInfo) {
         if (info.groupFormed) {
+            // Only trigger connect if we are not already connected at the P2P level
             if (_uiState.value !is UiState.Connected) {
                 notificationHelper.showConnectedNotification()
+                viewModelScope.launch {
+                  val goIp = info.groupOwnerAddress?.hostAddress
+                  if (!info.isGroupOwner && goIp != null) {
+                     socketClient.connect(goIp)
+                  }
+                }
             }
-            viewModelScope.launch {
-                socketClient.connect()
-            }
-            _uiState.value = UiState.Connected
         } else {
             if (_uiState.value is UiState.Connected) {
                 notificationHelper.showDisconnectedNotification()

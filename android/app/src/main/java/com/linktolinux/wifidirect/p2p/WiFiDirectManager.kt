@@ -18,6 +18,9 @@ class WiFiDirectManager(
         manager.discoverPeers(channel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 Log.d(TAG, "Discovery started")
+                requestPeers { peers ->
+                    Log.d(TAG, "Peers discovered: ${peers.deviceList.joinToString { it.deviceName + " (" + it.deviceAddress + ")" }}")
+                }
                 onSuccess()
             }
             override fun onFailure(reason: Int) {
